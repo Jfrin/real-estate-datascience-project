@@ -1,0 +1,108 @@
+# ---------------------------------------------------------------------------
+# Step 1: Core Infrastructure
+# Kafka (KRaft mode, no Zookeeper) + Cassandra + MinIO
+# No pipeline logic yet — just confirm the plumbing works.
+#
+# NOTE: container_name is intentionally NOT set on any service below.
+# This lets you run multiple copies of this stack (e.g. "dev" and "test")
+# without name conflicts — each copy is scoped by COMPOSE_PROJECT_NAME
+# (see .env) instead of a fixed container name.
+# ---------------------------------------------------------------------------
+
+services:
+
+  # ---------------------------------------------------------------------
+  # Kafka (KRaft mode — no Zookeeper required)
+  # Using Confluent's official cp-kafka image. (We tried apache/kafka and
+  # bitnami/kafka first — apache/kafka has a file-locking bug on some
+  # Docker Desktop for Windows volume backends, and bitnami/kafka moved
+  # behind a paid "Bitnami Secure Images" subscription. cp-kafka avoids
+  # both problems and is Confluent's own documented KRaft setup.)
+  # ---------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    hostname: kafka
+    ports:
+      - "9092:9092"       # client connections from host machine
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - platform_net
+
+  # ---------------------------------------------------------------------
+  # Cassandra
+  # ---------------------------------------------------------------------
+  cassandra:
+    image: cassandra:5.0
+    ports:
+      - "9042:9042"        # CQL native transport
+    environment:
+      CASSANDRA_CLUSTER_NAME: nyc_realestate_cluster
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      # Keep memory usage modest for local/dev use
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+    networks:
+      - platform_net
+
+  # ---------------------------------------------------------------------
+  # MinIO (S3-compatible object storage — will back the lakehouse later)
+  # ---------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"        # S3 API
+      - "9001:9001"        # Web console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+    networks:
+      - platform_net
+
+networks:
+  platform_net:
+    driver: bridge
+
+volumes:
+  kafka_data:
+  cassandra_data:
+  minio_data:
