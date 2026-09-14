@@ -134,6 +134,33 @@ services:
     restart: unless-stopped
     networks:
       - platform_net
+  
+  acris-poller:
+    build: ./generic-socrata-poller
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SOCRATA_URL: "https://data.cityofnewyork.us/resource/bnx9-e6tj.json"
+      ORDER_FIELD: ""
+      KEY_FIELD: "document_id"
+      KAFKA_TOPIC: "sales.acris"
+      FETCH_LIMIT: "50"
+    networks:
+      - platform_net
+
+  pluto-poller:
+    build: ./generic-socrata-poller
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SOCRATA_URL: "https://data.cityofnewyork.us/resource/64uk-42ks.json"
+      KEY_FIELD: "bbl"
+      KAFKA_TOPIC: "parcels.pluto"
+      FETCH_LIMIT: "50"
+    networks:
+      - platform_net
 
 networks:
   platform_net:
@@ -143,3 +170,4 @@ volumes:
   kafka_data:
   cassandra_data:
   minio_data:
+
