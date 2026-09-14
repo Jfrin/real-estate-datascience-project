@@ -1,19 +1,7 @@
-# ---------------------------------------------------------------------------
-# NYC Real-Estate Platform — Combined Stack (Steps 1 + 2 + 3)
-#
-# Kafka, Cassandra, MinIO, the DOB permits poller, and now a Spark
-# Structured Streaming job that consumes permits.dob, cleans it, and
-# writes it into a Cassandra table.
-#
-# Bring the whole thing up:      docker compose up -d --build
-# Tear it all down:              docker compose down
-# Tear down AND wipe data:       docker compose down -v
-# ---------------------------------------------------------------------------
-
 services:
 
   # ---------------------------------------------------------------------
-  # Kafka (KRaft mode — no Zookeeper required)
+  # Kafka
   # ---------------------------------------------------------------------
   kafka:
     image: confluentinc/cp-kafka:7.6.0
@@ -94,7 +82,7 @@ services:
       - platform_net
 
   # ---------------------------------------------------------------------
-  # DOB Permits Poller (Step 2)
+  # POLLERS
   # ---------------------------------------------------------------------
   dob-permits-poller:
     build: .
@@ -110,31 +98,6 @@ services:
     networks:
       - platform_net
 
-  # ---------------------------------------------------------------------
-  # Spark Structured Streaming job (Step 3)
-  # Consumes permits.dob, cleans it, writes to Cassandra. Runs Spark in
-  # local mode inside this one container (no separate master/worker).
-  # Runs continuously (it's a streaming job, not one-shot), so it's set
-  # to restart automatically if it crashes.
-  # ---------------------------------------------------------------------
-  spark-streaming-job:
-    build: ./spark-streaming-job
-    depends_on:
-      kafka:
-        condition: service_healthy
-      cassandra:
-        condition: service_healthy
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      KAFKA_TOPIC: permits.dob
-      CASSANDRA_HOST: cassandra
-      CASSANDRA_PORT: 9042
-      CASSANDRA_KEYSPACE: nyc_realestate
-      CASSANDRA_TABLE: permits_current
-    restart: unless-stopped
-    networks:
-      - platform_net
-  
   acris-poller:
     build: ./generic-socrata-poller
     depends_on:
@@ -161,6 +124,58 @@ services:
       FETCH_LIMIT: "50"
     networks:
       - platform_net
+
+  # ---------------------------------------------------------------------
+  # STREAMING TIME
+  # ---------------------------------------------------------------------
+  spark-streaming-job:
+    build: ./spark-streaming-job
+    depends_on:
+      kafka: {condition: service_healthy}
+      cassandra: {condition: service_healthy}
+    environment:
+      SOURCE_TYPE: dob
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: permits.dob
+      CASSANDRA_HOST: cassandra
+      CASSANDRA_PORT: 9042
+      CASSANDRA_KEYSPACE: nyc_realestate
+      CASSANDRA_TABLE: permits_current
+    restart: unless-stopped
+    networks: [platform_net]
+
+  acris-streaming-job:
+    build: ./spark-streaming-job
+    depends_on:
+      kafka: {condition: service_healthy}
+      cassandra: {condition: service_healthy}
+    environment:
+      SOURCE_TYPE: acris
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: sales.acris
+      CASSANDRA_HOST: cassandra
+      CASSANDRA_PORT: 9042
+      CASSANDRA_KEYSPACE: nyc_realestate
+      CASSANDRA_TABLE: sales_acris
+    restart: unless-stopped
+    networks: [platform_net]
+
+  pluto-streaming-job:
+    build: ./spark-streaming-job
+    depends_on:
+      kafka: {condition: service_healthy}
+      cassandra: {condition: service_healthy}
+    environment:
+      SOURCE_TYPE: pluto
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: parcels.pluto
+      CASSANDRA_HOST: cassandra
+      CASSANDRA_PORT: 9042
+      CASSANDRA_KEYSPACE: nyc_realestate
+      CASSANDRA_TABLE: parcels_pluto
+    restart: unless-stopped
+    networks: [platform_net]
+
 
 networks:
   platform_net:
