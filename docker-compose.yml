@@ -176,6 +176,19 @@ services:
     restart: unless-stopped
     networks: [platform_net]
 
+  lakehouse-batch-job:
+    build: ./lakehouse-batch-job
+    depends_on:
+      cassandra: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    environment:
+      CASSANDRA_HOST: cassandra
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET: lakehouse
+    networks: [platform_net]
+
 
 networks:
   platform_net:
