@@ -227,6 +227,20 @@ services:
     command: scheduler
     networks: [platform_net]
 
+  report-job:
+    build: ./report-job
+    depends_on:
+      cassandra: {condition: service_healthy}
+    environment:
+      CASSANDRA_HOST: cassandra
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: "roguesoldier464@gmail.com"
+      SMTP_PASSWORD: "wbyl qaxn vbbk tssf"
+      REPORT_FROM_EMAIL: "roguesoldier464@gmail.com"
+      REPORT_TO_EMAIL: "roguesoldier464@gmail.com"
+    networks: [platform_net]
+
 
 networks:
   platform_net:
