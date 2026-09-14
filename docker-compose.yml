@@ -67,8 +67,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
@@ -184,8 +184,8 @@ services:
     environment:
       CASSANDRA_HOST: cassandra
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin123
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: lakehouse
     networks: [platform_net]
   airflow-postgres:
@@ -203,7 +203,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    entrypoint: bash -c "airflow db init && airflow users create --username admin --password admin --firstname a --lastname a --role Admin --email admin@example.com"
+      entrypoint: bash -c "airflow db init && airflow users create --username ${AIRFLOW_ADMIN_USER} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname a --lastname a --role Admin --email admin@example.com"
     networks: [platform_net]
 
   airflow-webserver:
@@ -235,10 +235,10 @@ services:
       CASSANDRA_HOST: cassandra
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: "587"
-      SMTP_USER: "roguesoldier464@gmail.com"
-      SMTP_PASSWORD: "wbyl qaxn vbbk tssf"
-      REPORT_FROM_EMAIL: "roguesoldier464@gmail.com"
-      REPORT_TO_EMAIL: "roguesoldier464@gmail.com"
+      SMTP_USER: "${SMTP_USER}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD}"
+      REPORT_FROM_EMAIL: "${REPORT_FROM_EMAIL}"
+      REPORT_TO_EMAIL: "${REPORT_TO_EMAIL}"
     networks: [platform_net]
 
 

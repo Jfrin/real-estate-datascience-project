@@ -11,8 +11,8 @@ CASSANDRA_HOST = os.environ.get("CASSANDRA_HOST", "cassandra")
 CASSANDRA_PORT = int(os.environ.get("CASSANDRA_PORT", "9042"))
 KEYSPACE = os.environ.get("CASSANDRA_KEYSPACE", "nyc_realestate")
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
-MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "minioadmin123")
+MINIO_ACCESS_KEY = os.environ["MINIO_ACCESS_KEY"]
+MINIO_SECRET_KEY = os.environ["MINIO_SECRET_KEY"]
 BUCKET = os.environ.get("MINIO_BUCKET", "lakehouse")
 RUN_DATE = os.environ.get("RUN_DATE") or pd.Timestamp.utcnow().strftime("%Y-%m-%d")
 

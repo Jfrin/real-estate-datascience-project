@@ -26,9 +26,11 @@ def fetch_counts():
     cluster = Cluster([CASSANDRA_HOST], port=CASSANDRA_PORT)
     session = cluster.connect(KEYSPACE)
 
-    permits_by_borough = list(session.execute(
-        "SELECT borough, COUNT(*) as cnt FROM permits_current GROUP BY borough ALLOW FILTERING"
-    ))
+    from collections import Counter
+    rows = session.execute("SELECT borough FROM permits_current")
+    counts = Counter(r.borough for r in rows)
+    permits_by_borough = [type("Row", (), {"borough": b, "cnt": c})() for b, c in counts.items()]
+    
     total_sales = session.execute("SELECT COUNT(*) FROM sales_acris").one()[0]
     total_parcels = session.execute("SELECT COUNT(*) FROM parcels_pluto").one()[0]
 
