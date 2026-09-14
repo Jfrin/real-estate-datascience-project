@@ -1,177 +1,146 @@
-# Step 1 — Core Infrastructure
+# Step 3 — Spark Streaming Job (Kafka → Spark → Cassandra)
 
-Kafka (KRaft mode, no Zookeeper) + Cassandra + MinIO.
-This is plumbing only — no pipeline logic yet. The goal is to confirm all
-three services start cleanly and are reachable before building anything on
-top of them.
+Adds a Spark Structured Streaming job that:
+1. Reads raw DOB permit JSON messages from the `permits.dob` Kafka topic
+2. Cleans them (parses dates, casts lat/long to numbers, drops rows
+   missing a primary key)
+3. Writes the cleaned rows into a Cassandra table, `nyc_realestate.permits_current`
 
-## Requirements
+**Design note:** this runs Spark in local mode inside one container,
+not a separate master + worker cluster. Functionally it proves the same
+thing (Kafka → Spark → Cassandra works), with far less to go wrong on a
+single dev machine. You can move to a real multi-node cluster later if
+you ever need to scale beyond one machine.
 
-- Docker Desktop (or Docker Engine + Docker Compose v2)
-- ~4 GB of free RAM for these three containers
-- Ports free on your host: `9092`, `9093`, `9042`, `9000`, `9001`
+## 1. Where these files go
 
-## 1. Start everything
+You should now have, in your **project root** (`D:\Projects\real estate
+datascience project`):
 
-```bash
-docker compose up -d
+```
+docker-compose.yml          <-- OVERWRITE with the one in this zip
+Dockerfile                  <-- unchanged, keep as-is
+requirements.txt            <-- unchanged, keep as-is
+dob_permits_poller.py       <-- unchanged, keep as-is
+spark-streaming-job/        <-- NEW folder, extract this in
+    Dockerfile
+    requirements.txt
+    streaming_job.py
 ```
 
-First startup will take a minute or two while images download and
-Cassandra initializes. Check status with:
+**Extract this zip directly into your project root** — say yes to
+overwriting `docker-compose.yml` (it's a superset of what you had: same
+Kafka/Cassandra/MinIO/poller config, plus the new `spark-streaming-job`
+service). Nothing else needs to change.
 
-```bash
-docker compose ps
-```
-
-All three should show `healthy` within about a minute (Cassandra takes the
-longest — its healthcheck has a 60s start period).
-
-## 2. Verify Kafka
-
-Check your Kafka container's actual name first (it may not be exactly `kafka` depending on your Compose project name):
+## 2. Bring it up
 
 ```powershell
-docker ps
+docker compose up -d --build
 ```
 
-Create a test topic (replace `realestate-kafka-1` with what you saw above, e.g. `realestate-kafka-1`):
+This builds the new Spark job image (first build will take a few minutes
+— it's installing a JVM plus PySpark) and starts it. It will wait for
+Kafka and Cassandra to both be healthy before starting, thanks to
+`depends_on: condition: service_healthy`.
+
+The **first time it starts**, it also needs to download the Kafka
+connector jar from Maven Central — expect an extra 30-60 seconds on
+first boot while that happens. Watch it happen:
 
 ```powershell
-docker exec -it realestate-kafka-1 kafka-topics --bootstrap-server localhost:9092 --create --topic test-topic --partitions 1 --replication-factor 1
+docker compose logs -f spark-streaming-job
 ```
 
-List topics to confirm it exists:
+## 3. What success looks like in the logs
+
+You should see, in order:
+- Java/Spark startup noise (safe to ignore)
+- Ivy resolving and downloading `spark-sql-kafka-0-10_2.12` and its
+  dependencies
+- `Cassandra is reachable at cassandra:9042`
+- `Keyspace 'nyc_realestate' and table 'permits_current' are ready.`
+- `Starting stream: Kafka topic 'permits.dob' @ kafka:29092 -> Cassandra 'nyc_realestate.permits_current'`
+- Every ~30 seconds: `Batch N: wrote X/X rows to Cassandra.`
+
+The job reads with `startingOffsets: earliest`, so on first run it will
+pick up and process the 50 records your Step 2 poller already published.
+
+## 4. Verify the data actually landed in Cassandra
 
 ```powershell
-docker exec -it realestate-kafka-1 kafka-topics --bootstrap-server localhost:9092 --list
+docker exec -it realestate-cassandra-1 cqlsh
 ```
 
-You should see `test-topic` in the output.
-
-Optional — send and read a message to confirm the full loop:
-
-```powershell
-# In one terminal, start a producer and type a message, then Ctrl+C
-docker exec -it realestate-kafka-1 kafka-console-producer --bootstrap-server localhost:9092 --topic test-topic
-
-# In another terminal, start a consumer to read it back
-docker exec -it realestate-kafka-1 kafka-console-consumer --bootstrap-server localhost:9092 --topic test-topic --from-beginning
-```
-
-## 3. Verify Cassandra
-
-Open a CQL shell:
-
-```bash
-docker exec -it cassandra cqlsh
-```
-
-Inside the shell, confirm it responds and create a test keyspace:
+*(use whatever your actual Cassandra container name is — check with `docker ps`)*
 
 ```sql
-DESCRIBE KEYSPACES;
+USE nyc_realestate;
 
-CREATE KEYSPACE IF NOT EXISTS test_ks
-WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1};
+SELECT permit_si_no, borough, street_name, permit_type, filing_date, latitude, longitude
+FROM permits_current
+LIMIT 10;
 
-USE test_ks;
-
-CREATE TABLE ping (id int PRIMARY KEY, note text);
-INSERT INTO ping (id, note) VALUES (1, 'cassandra is alive');
-SELECT * FROM ping;
+SELECT COUNT(*) FROM permits_current;
 
 EXIT;
 ```
 
-You should see the row come back from `SELECT`.
+You should see real, cleaned rows — proper `date` type for `filing_date`
+(not a string), numeric `latitude`/`longitude`, and readable column names.
+That's the proof this step is working: raw JSON from Kafka became a
+structured, queryable Cassandra table.
 
-## 4. Verify MinIO
+## 5. Feed it more data
 
-Open the web console in your browser:
-
-```
-http://localhost:9001
-```
-
-Log in with:
-- **Username:** `minioadmin`
-- **Password:** `minioadmin123`
-
-Once logged in, create a bucket (e.g. `raw-data`) through the UI to confirm
-writes work. You can also check the API health endpoint directly:
-
-```bash
-curl http://localhost:9000/minio/health/live
-```
-
-A `200 OK` with no error means the S3 API is up.
-
-## 5. Tear down (when done testing)
-
-```bash
-# Stop containers, keep data
-docker compose down
-
-# Stop containers AND wipe all data volumes (clean slate)
-docker compose down -v
-```
-
-## Running multiple copies of this stack
-
-This compose file has no hardcoded `container_name` values, and a `.env`
-file sets `COMPOSE_PROJECT_NAME=realestate`. That means:
-
-- Containers, networks, and volumes are namespaced under `realestate`
-  instead of colliding with anything else on your machine.
-- If you previously hit a `container name "/kafka" already in use` error,
-  that won't happen anymore — names are now auto-generated per project.
-
-**Important caveat:** the project name only isolates *names*. The **ports**
-(`9092`, `9093`, `9042`, `9000`, `9001`) are still fixed in
-`docker-compose.yml`. That means:
-
-- You can safely run this stack, tear it down, and bring it back up
-  repeatedly with no conflicts (this solves the original error).
-- You can also copy this folder and run a second, differently-named
-  project (change `COMPOSE_PROJECT_NAME` in the copy's `.env`) as long as
-  it's not running **at the same time** as the first — they'd fight over
-  the same host ports.
-- To run two copies **simultaneously**, edit the port mappings in the
-  second copy's `docker-compose.yml` (left side of the `:` only, e.g.
-  `9092` → `9192`) so each stack uses a different set of host ports.
-
-For most workflows (one dev environment, stopped and restarted as needed)
-you won't need to touch ports at all — the `.env` project name alone is
-enough to avoid the conflict you ran into.
-
-## Kafka image history (why it changed twice)
-
-If you're wondering why this differs from earlier instructions:
-
-1. **`apache/kafka`** — hit a known file-locking bug on some Docker Desktop
-   for Windows volume backends (`Error while writing meta.properties file`).
-2. **`bitnami/kafka`** — Bitnami moved this image behind a paid "Bitnami
-   Secure Images" subscription; the free tag no longer resolves.
-3. **`confluentinc/cp-kafka`** (current) — Confluent's official image,
-   configured per their documented KRaft (no-Zookeeper) setup. This is
-   also the same image your machine already had cached from another
-   project, so it should pull instantly.
-
-If you have leftover volumes from the earlier attempts, wipe them first:
+The Step 2 poller runs once and exits by default. Re-run it to publish a
+fresh batch, and the streaming job (which keeps running continuously)
+will pick up the new messages within its 30-second trigger interval:
 
 ```powershell
-docker compose down -v
-docker volume rm realestate_kafka_data
-docker compose up -d
+docker compose up -d --build dob-permits-poller
 ```
 
-## Notes
+Then re-check the Cassandra row count — it should grow.
 
-- Credentials here (`minioadmin` / `minioadmin123`, no auth on Kafka/Cassandra)
-  are fine for local development only — never use these defaults if you
-  expose any of these ports beyond your own machine.
-- The Kafka `CLUSTER_ID` is a fixed, arbitrary value so the same compose
-  file behaves consistently across restarts. It doesn't need to be changed.
-- Once all three checks above pass, you're ready to move to Step 2: writing
-  a source poller that publishes real records into a Kafka topic.
+## Troubleshooting
+
+**"Could not connect to Cassandra after retries"**
+Check `docker ps` — Cassandra needs to show `(healthy)`, not
+`(health: starting)`. If Cassandra is slow to boot, the job will keep
+retrying every 5 seconds for up to 20 attempts (~100 seconds) before
+giving up. If it still fails after that, restart just this service:
+```powershell
+docker compose restart spark-streaming-job
+```
+
+**Ivy/Maven download fails or times out on first start**
+This needs outbound internet access from the container to Maven Central.
+If your network blocks this, try again — sometimes it's transient. If it
+persists, check that your Docker Desktop network/proxy settings allow
+outbound HTTPS.
+
+**No rows showing up in Cassandra after a few minutes**
+Check the job logs for errors:
+```powershell
+docker compose logs spark-streaming-job
+```
+Common cause: the Kafka topic is genuinely empty because the poller
+hasn't been run yet, or ran but failed. Re-check Step 2's verification
+steps first.
+
+**Job container keeps restarting**
+```powershell
+docker compose logs spark-streaming-job
+```
+Since this service has `restart: unless-stopped`, a crash loop will keep
+retrying automatically — check the logs to see the actual Python/Spark
+error rather than just watching it restart.
+
+## What's next
+
+Once you've confirmed real, cleaned permit data is queryable in
+Cassandra, you're ready for **Step 4: add the remaining source pollers**
+— repeating the Step 2 pattern for ACRIS (sales), PLUTO (parcels),
+Census, and mortgage rate data, each with its own Kafka topic and (later)
+its own Spark streaming job or an extension of this one.

@@ -1,29 +1,25 @@
 # ---------------------------------------------------------------------------
-# Step 1: Core Infrastructure
-# Kafka (KRaft mode, no Zookeeper) + Cassandra + MinIO
-# No pipeline logic yet — just confirm the plumbing works.
+# NYC Real-Estate Platform — Combined Stack (Steps 1 + 2 + 3)
 #
-# NOTE: container_name is intentionally NOT set on any service below.
-# This lets you run multiple copies of this stack (e.g. "dev" and "test")
-# without name conflicts — each copy is scoped by COMPOSE_PROJECT_NAME
-# (see .env) instead of a fixed container name.
+# Kafka, Cassandra, MinIO, the DOB permits poller, and now a Spark
+# Structured Streaming job that consumes permits.dob, cleans it, and
+# writes it into a Cassandra table.
+#
+# Bring the whole thing up:      docker compose up -d --build
+# Tear it all down:              docker compose down
+# Tear down AND wipe data:       docker compose down -v
 # ---------------------------------------------------------------------------
 
 services:
 
   # ---------------------------------------------------------------------
   # Kafka (KRaft mode — no Zookeeper required)
-  # Using Confluent's official cp-kafka image. (We tried apache/kafka and
-  # bitnami/kafka first — apache/kafka has a file-locking bug on some
-  # Docker Desktop for Windows volume backends, and bitnami/kafka moved
-  # behind a paid "Bitnami Secure Images" subscription. cp-kafka avoids
-  # both problems and is Confluent's own documented KRaft setup.)
   # ---------------------------------------------------------------------
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     hostname: kafka
     ports:
-      - "9092:9092"       # client connections from host machine
+      - "9092:9092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -55,13 +51,12 @@ services:
   cassandra:
     image: cassandra:5.0
     ports:
-      - "9042:9042"        # CQL native transport
+      - "9042:9042"
     environment:
       CASSANDRA_CLUSTER_NAME: nyc_realestate_cluster
       CASSANDRA_DC: dc1
       CASSANDRA_RACK: rack1
       CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
-      # Keep memory usage modest for local/dev use
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
     volumes:
@@ -76,13 +71,13 @@ services:
       - platform_net
 
   # ---------------------------------------------------------------------
-  # MinIO (S3-compatible object storage — will back the lakehouse later)
+  # MinIO
   # ---------------------------------------------------------------------
   minio:
     image: minio/minio:latest
     ports:
-      - "9000:9000"        # S3 API
-      - "9001:9001"        # Web console
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
@@ -95,6 +90,48 @@ services:
       timeout: 10s
       retries: 10
       start_period: 15s
+    networks:
+      - platform_net
+
+  # ---------------------------------------------------------------------
+  # DOB Permits Poller (Step 2)
+  # ---------------------------------------------------------------------
+  dob-permits-poller:
+    build: .
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: permits.dob
+      FETCH_LIMIT: 50
+      POLL_INTERVAL_SECONDS: 0
+      SOCRATA_APP_TOKEN: ""
+    networks:
+      - platform_net
+
+  # ---------------------------------------------------------------------
+  # Spark Structured Streaming job (Step 3)
+  # Consumes permits.dob, cleans it, writes to Cassandra. Runs Spark in
+  # local mode inside this one container (no separate master/worker).
+  # Runs continuously (it's a streaming job, not one-shot), so it's set
+  # to restart automatically if it crashes.
+  # ---------------------------------------------------------------------
+  spark-streaming-job:
+    build: ./spark-streaming-job
+    depends_on:
+      kafka:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_TOPIC: permits.dob
+      CASSANDRA_HOST: cassandra
+      CASSANDRA_PORT: 9042
+      CASSANDRA_KEYSPACE: nyc_realestate
+      CASSANDRA_TABLE: permits_current
+    restart: unless-stopped
     networks:
       - platform_net
 
