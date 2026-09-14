@@ -241,6 +241,16 @@ services:
       REPORT_TO_EMAIL: "${REPORT_TO_EMAIL}"
     networks: [platform_net]
 
+  status-dashboard:
+    build: ./status-dashboard
+    depends_on:
+      kafka: {condition: service_healthy}
+      cassandra: {condition: service_healthy}
+    environment:
+      CASSANDRA_HOST: cassandra
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports: ["5050:5000"]
+    networks: [platform_net]
 
 networks:
   platform_net:
