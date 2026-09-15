@@ -1,1 +1,2 @@
 .env
+airflow/dags/__pycache__/daily_ingest.cpython-312.pyc
