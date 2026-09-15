@@ -188,6 +188,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: lakehouse
     networks: [platform_net]
+
   airflow-postgres:
     image: postgres:15
     environment:
@@ -241,15 +242,39 @@ services:
       REPORT_TO_EMAIL: "${REPORT_TO_EMAIL}"
     networks: [platform_net]
 
-  status-dashboard:
-    build: ./status-dashboard
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    ports: ["8085:8080"]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [platform_net]
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    command: ["--kafka.server=kafka:29092"]
     depends_on:
       kafka: {condition: service_healthy}
-      cassandra: {condition: service_healthy}
+    networks: [platform_net]
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports: ["9090:9090"]
+    networks: [platform_net]
+
+  grafana:
+    image: grafana/grafana:latest
     environment:
-      CASSANDRA_HOST: cassandra
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    ports: ["5050:5000"]
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports: ["3000:3000"]
     networks: [platform_net]
 
 networks:
