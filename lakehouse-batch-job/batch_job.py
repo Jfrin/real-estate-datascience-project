@@ -1,5 +1,5 @@
-import io, logging, os
-import boto3
+import logging, os
+from pathlib import Path
 import pandas as pd
 from cassandra.cluster import Cluster
 from cassandra.util import Date as CassandraDate
@@ -11,35 +11,20 @@ CASSANDRA_HOST = os.environ.get("CASSANDRA_HOST", "cassandra")
 CASSANDRA_PORT = int(os.environ.get("CASSANDRA_PORT", "9042"))
 KEYSPACE = os.environ.get("CASSANDRA_KEYSPACE", "nyc_realestate")
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
-MINIO_ACCESS_KEY = os.environ["MINIO_ACCESS_KEY"]
-MINIO_SECRET_KEY = os.environ["MINIO_SECRET_KEY"]
-BUCKET = os.environ.get("MINIO_BUCKET", "lakehouse")
+LAKEHOUSE_PATH = Path(os.environ.get("LAKEHOUSE_PATH", "/data/lakehouse"))
 RUN_DATE = os.environ.get("RUN_DATE") or pd.Timestamp.utcnow().strftime("%Y-%m-%d")
 
 TABLES = ["permits_current", "sales_acris", "parcels_pluto"]
 
-s3 = boto3.client(
-    "s3", endpoint_url=MINIO_ENDPOINT,
-    aws_access_key_id=MINIO_ACCESS_KEY, aws_secret_access_key=MINIO_SECRET_KEY,
-)
-
-
-def ensure_bucket():
-    existing = [b["Name"] for b in s3.list_buckets().get("Buckets", [])]
-    if BUCKET not in existing:
-        s3.create_bucket(Bucket=BUCKET)
-        log.info("Created bucket '%s'", BUCKET)
-
 
 def write_parquet(df: pd.DataFrame, key: str):
-    buf = io.BytesIO()
-    df.to_parquet(buf, index=False)
-    s3.put_object(Bucket=BUCKET, Key=key, Body=buf.getvalue())
-    log.info("Wrote %d rows -> s3://%s/%s", len(df), BUCKET, key)
+    path = LAKEHOUSE_PATH / key
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, index=False)
+    log.info("Wrote %d rows -> %s", len(df), path)
 
 
 def main():
-    ensure_bucket()
     cluster = Cluster([CASSANDRA_HOST], port=CASSANDRA_PORT)
     session = cluster.connect(KEYSPACE)
 

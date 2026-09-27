@@ -1,0 +1,115 @@
+# Show all running services
+docker compose ps
+
+# Show live resource usage across the whole stack
+docker stats --no-stream
+
+# List Kafka topics (shows the event backbone)
+docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --list
+
+# Describe a topic (partitions, replication)
+docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --describe --topic sales.acris
+
+# Watch live messages flowing into a topic
+docker compose exec kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic permits.dob --from-beginning
+
+# Open Cassandra shell
+docker compose exec cassandra cqlsh
+
+# Show keyspaces (inside cqlsh)
+DESCRIBE KEYSPACES;
+
+# Show tables in the project keyspace (inside cqlsh)
+USE nyc_realestate;
+DESCRIBE TABLES;
+
+# Query current permits data (inside cqlsh)
+SELECT * FROM permits_current LIMIT 10;
+
+# Query ACRIS sales data (inside cqlsh)
+SELECT * FROM sales_acris LIMIT 10;
+
+# Query PLUTO parcel data (inside cqlsh)
+SELECT * FROM parcels_pluto LIMIT 10;
+# Trigger the batch job manually
+docker compose run lakehouse-batch-job
+
+# Open Airflow UI (run in browser)
+http://localhost:8080
+
+# List Airflow DAGs from CLI
+docker compose exec airflow-scheduler airflow dags list
+
+# Trigger a DAG run manually
+docker compose exec airflow-scheduler airflow dags trigger daily_price_aggregate
+
+# Check DAG run status
+docker compose exec airflow-scheduler airflow dags list-runs -d daily_price_aggregate
+
+# Tail logs from a streaming job (shows live processing)
+docker compose logs -f acris-streaming-job
+
+# Show Cassandra node health
+docker compose exec cassandra nodetool status
+
+
+LAKEHOUSE SHIT ----------------------------------------------------------------------
+# Run the batch job (Cassandra -> bronze/silver/gold Parquet)
+docker compose run --rm lakehouse-batch-job
+
+# Run the batch job for a specific date partition
+docker compose run --rm -e RUN_DATE=2026-09-28 lakehouse-batch-job
+
+# View batch job logs from the last run
+docker compose logs lakehouse-batch-job --tail=50
+
+# Show the lakehouse folder structure (bronze/silver/gold)
+docker compose run --rm --entrypoint find lakehouse-batch-job /data/lakehouse -maxdepth 3
+
+# List bronze tables
+docker compose run --rm --entrypoint ls lakehouse-batch-job /data/lakehouse/bronze
+
+# List silver tables
+docker compose run --rm --entrypoint ls lakehouse-batch-job /data/lakehouse/silver
+
+# List gold tables
+docker compose run --rm --entrypoint ls lakehouse-batch-job /data/lakehouse/gold
+
+# Show date partitions for a table
+docker compose run --rm --entrypoint ls lakehouse-batch-job /data/lakehouse/bronze/permits_current
+
+# Show all Parquet files with sizes
+docker compose run --rm --entrypoint find lakehouse-batch-job /data/lakehouse -name "*.parquet" -exec ls -lh {} \;
+
+# Show total lakehouse disk usage per layer
+docker compose run --rm --entrypoint du lakehouse-batch-job -sh /data/lakehouse/bronze /data/lakehouse/silver /data/lakehouse/gold
+
+# Preview the gold rollup (permits by borough)
+docker compose run --rm --entrypoint python lakehouse-batch-job -c "import pandas as pd; print(pd.read_parquet('/data/lakehouse/gold/permits_by_borough'))"
+
+# Preview first rows of a bronze table
+docker compose run --rm --entrypoint python lakehouse-batch-job -c "import pandas as pd; print(pd.read_parquet('/data/lakehouse/bronze/permits_current').head(10))"
+
+# Row counts for every bronze table
+docker compose run --rm --entrypoint python lakehouse-batch-job -c "import pandas as pd; [print(t, len(pd.read_parquet(f'/data/lakehouse/bronze/{t}'))) for t in ['permits_current','sales_acris','parcels_pluto']]"
+
+# Show column schema of a silver table
+docker compose run --rm --entrypoint python lakehouse-batch-job -c "import pandas as pd; print(pd.read_parquet('/data/lakehouse/silver/sales_acris').dtypes)"
+
+# List Docker volumes (find the lakehouse volume)
+docker volume ls
+
+# Inspect the lakehouse volume (mount point, driver)
+docker volume inspect realestate_lakehouse_data
+
+# Export the whole lakehouse to a folder on your PC (PowerShell)
+docker run --rm -v realestate_lakehouse_data:/data -v "${PWD}\lakehouse_export:/out" alpine cp -r /data/. /out
+
+# Wipe the lakehouse and start fresh (deletes all Parquet data)
+docker volume rm realestate_lakehouse_data
+
+# Confirm no leftover MinIO/S3 references in the batch job (PowerShell)
+Select-String -Path .\lakehouse-batch-job\*.py -Pattern "boto3|minio|s3a"
+
+# Confirm no leftover MinIO references in compose/env (PowerShell)
+Select-String -Path .\docker-compose.yml, .\.env -Pattern "minio"

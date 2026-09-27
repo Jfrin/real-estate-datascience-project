@@ -1,0 +1,5 @@
+cassandra-driver
+pandas
+matplotlib
+seaborn
+folium

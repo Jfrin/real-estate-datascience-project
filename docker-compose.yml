@@ -60,26 +60,7 @@ services:
 
   # ---------------------------------------------------------------------
   # MinIO
-  # ---------------------------------------------------------------------
-  minio:
-    image: minio/minio:latest
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 15s
-    networks:
-      - platform_net
+  # --------------------------------------------------------------------
 
   # ---------------------------------------------------------------------
   # POLLERS
@@ -180,13 +161,11 @@ services:
     build: ./lakehouse-batch-job
     depends_on:
       cassandra: {condition: service_healthy}
-      minio: {condition: service_healthy}
     environment:
       CASSANDRA_HOST: cassandra
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET: lakehouse
+      LAKEHOUSE_PATH: /data/lakehouse
+    volumes:
+      - lakehouse_data:/data/lakehouse
     networks: [platform_net]
 
   airflow-postgres:
@@ -204,9 +183,8 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      entrypoint: bash -c "airflow db init && airflow users create --username ${AIRFLOW_ADMIN_USER} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname a --lastname a --role Admin --email admin@example.com"
+    entrypoint: bash -c "airflow db migrate && airflow users create --username ${AIRFLOW_ADMIN_USER} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname a --lastname a --role Admin --email admin@example.com"
     networks: [platform_net]
-
   airflow-webserver:
     build: ./airflow
     depends_on: [airflow-init]
@@ -259,22 +237,15 @@ services:
       kafka: {condition: service_healthy}
     networks: [platform_net]
 
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    ports: ["9090:9090"]
-    networks: [platform_net]
-
-  grafana:
-    image: grafana/grafana:latest
+  heatmap-job:
+    build: ./heatmap-job
+    depends_on:
+      cassandra: {condition: service_healthy}
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      CASSANDRA_HOST: cassandra
+      OUTPUT_DIR: /output
     volumes:
-      - grafana_data:/var/lib/grafana
-    ports: ["3000:3000"]
+      - ./heatmaps:/output
     networks: [platform_net]
 
 networks:
@@ -284,5 +255,4 @@ networks:
 volumes:
   kafka_data:
   cassandra_data:
-  minio_data:
-
+  lakehouse_data:
