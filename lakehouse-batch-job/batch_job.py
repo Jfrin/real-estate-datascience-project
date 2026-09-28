@@ -1,4 +1,4 @@
-import logging, os
+import logging, os, time
 from pathlib import Path
 import pandas as pd
 from cassandra.cluster import Cluster
@@ -10,11 +10,26 @@ log = logging.getLogger("lakehouse_batch")
 CASSANDRA_HOST = os.environ.get("CASSANDRA_HOST", "cassandra")
 CASSANDRA_PORT = int(os.environ.get("CASSANDRA_PORT", "9042"))
 KEYSPACE = os.environ.get("CASSANDRA_KEYSPACE", "nyc_realestate")
-MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
 LAKEHOUSE_PATH = Path(os.environ.get("LAKEHOUSE_PATH", "/data/lakehouse"))
 RUN_DATE = os.environ.get("RUN_DATE") or pd.Timestamp.utcnow().strftime("%Y-%m-%d")
+CONNECT_RETRIES = int(os.environ.get("CONNECT_RETRIES", "30"))
+CONNECT_WAIT_SECONDS = int(os.environ.get("CONNECT_WAIT_SECONDS", "10"))
 
 TABLES = ["permits_current", "sales_acris", "parcels_pluto"]
+
+
+def connect():
+    # Retry: Cassandra/DNS/keyspace may not be ready the moment the container starts.
+    for attempt in range(1, CONNECT_RETRIES + 1):
+        try:
+            cluster = Cluster([CASSANDRA_HOST], port=CASSANDRA_PORT)
+            session = cluster.connect(KEYSPACE)
+            log.info("Connected to Cassandra at %s:%s", CASSANDRA_HOST, CASSANDRA_PORT)
+            return cluster, session
+        except Exception as e:
+            log.warning("Cassandra not ready (%d/%d): %r", attempt, CONNECT_RETRIES, e)
+            time.sleep(CONNECT_WAIT_SECONDS)
+    raise SystemExit("Could not connect to Cassandra after retries.")
 
 
 def write_parquet(df: pd.DataFrame, key: str):
@@ -25,8 +40,7 @@ def write_parquet(df: pd.DataFrame, key: str):
 
 
 def main():
-    cluster = Cluster([CASSANDRA_HOST], port=CASSANDRA_PORT)
-    session = cluster.connect(KEYSPACE)
+    cluster, session = connect()
 
     silver_frames = {}
     for table in TABLES:
