@@ -244,8 +244,10 @@ services:
     environment:
       CASSANDRA_HOST: cassandra
       OUTPUT_DIR: /output
+      LAKEHOUSE_PATH: /data/lakehouse
     volumes:
       - ./heatmaps:/output
+      - lakehouse_data:/data/lakehouse:ro
     networks: [platform_net]
 
 networks:
