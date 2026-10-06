@@ -11,5 +11,5 @@ with DAG(
 ) as dag:
     BashOperator(
         task_id="run_lakehouse_batch_job",
-        bash_command="docker start -a lakehouse-batch-job",
+        bash_command="docker start -a realestate-lakehouse-batch-job-1",
     )

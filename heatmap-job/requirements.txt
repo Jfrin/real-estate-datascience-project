@@ -3,3 +3,4 @@ pandas
 matplotlib
 seaborn
 folium
+pyarrow==17.0.0

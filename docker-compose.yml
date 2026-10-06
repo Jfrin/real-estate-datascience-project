@@ -6,6 +6,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     hostname: kafka
+    restart: unless-stopped
     ports:
       - "9092:9092"
     environment:
@@ -38,6 +39,7 @@ services:
   # ---------------------------------------------------------------------
   cassandra:
     image: cassandra:5.0
+    restart: unless-stopped
     ports:
       - "9042:9042"
     environment:
@@ -57,7 +59,6 @@ services:
       start_period: 60s
     networks:
       - platform_net
-
   # ---------------------------------------------------------------------
   # MinIO
   # --------------------------------------------------------------------
@@ -73,7 +74,7 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_TOPIC: permits.dob
-      FETCH_LIMIT: 50
+      FETCH_LIMIT: 50000
       POLL_INTERVAL_SECONDS: 0
       SOCRATA_APP_TOKEN: ""
     networks:
@@ -89,7 +90,7 @@ services:
       ORDER_FIELD: ""
       KEY_FIELD: "document_id"
       KAFKA_TOPIC: "sales.acris"
-      FETCH_LIMIT: "50"
+      FETCH_LIMIT: "50000"
     networks:
       - platform_net
 
@@ -102,7 +103,7 @@ services:
       SOCRATA_URL: "https://data.cityofnewyork.us/resource/64uk-42ks.json"
       KEY_FIELD: "bbl"
       KAFKA_TOPIC: "parcels.pluto"
-      FETCH_LIMIT: "50"
+      FETCH_LIMIT: "50000"
     networks:
       - platform_net
 
@@ -187,6 +188,7 @@ services:
     networks: [platform_net]
   airflow-webserver:
     build: ./airflow
+    restart: unless-stopped
     depends_on: [airflow-init]
     environment: *airflow-env
     volumes:
@@ -199,6 +201,7 @@ services:
   airflow-scheduler:
     build: ./airflow
     depends_on: [airflow-init]
+    restart: unless-stopped
     environment: *airflow-env
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -245,9 +248,20 @@ services:
       CASSANDRA_HOST: cassandra
       OUTPUT_DIR: /output
       LAKEHOUSE_PATH: /data/lakehouse
+      PREFER_CASSANDRA: "true"
+      CARTO_API_KEY: "${CARTO_API_KEY:-}"
     volumes:
       - ./heatmaps:/output
       - lakehouse_data:/data/lakehouse:ro
+    networks: [platform_net]
+ 
+  dashboard:
+    image: nginx:alpine
+    ports:
+      - "8088:80"
+    volumes:
+      - ./heatmaps:/usr/share/nginx/html:ro
+    restart: unless-stopped
     networks: [platform_net]
 
 networks:
@@ -258,3 +272,4 @@ volumes:
   kafka_data:
   cassandra_data:
   lakehouse_data:
+  
