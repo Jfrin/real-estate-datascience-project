@@ -31,7 +31,10 @@ ACRIS_BORO = {"1": "MANHATTAN", "2": "BRONX", "3": "BROOKLYN", "4": "QUEENS", "5
 PLUTO_BORO = {"MN": "MANHATTAN", "BX": "BRONX", "BK": "BROOKLYN", "QN": "QUEENS", "SI": "STATEN ISLAND"}
 
 os.makedirs(OUT, exist_ok=True)
-sns.set_theme(style="whitegrid")
+DARK = {"figure.facecolor": "#1f1f26", "axes.facecolor": "#1f1f26", "savefig.facecolor": "#1f1f26",
+        "axes.edgecolor": "#444", "axes.labelcolor": "#cfcfd6", "axes.titlecolor": "#eee",
+        "text.color": "#eee", "xtick.color": "#aaa", "ytick.color": "#aaa", "grid.color": "#33333c"}
+sns.set_theme(style="darkgrid", rc=DARK)
 
 
 # ---------------------------------------------------------------- loaders
@@ -407,40 +410,101 @@ SECTIONS = [
 ]
 v = int(time.time())
 body = ""
+nav = ""
 for title, items in SECTIONS:
-    cards = "".join(f'<section><h3>{t}</h3><img src="{fn}?v={v}"></section>'
+    cards = "".join(f'<section class="card"><h3>{t}</h3><img src="{fn}?v={v}" alt="{t}"></section>'
                     for fn, t in items if os.path.exists(f"{OUT}/{fn}"))
     if cards:
-        body += f"<h2>{title}</h2><div class='grid'>{cards}</div>"
+        sid = title.split()[0].lower()
+        nav += f'<a href="#{sid}">{title}</a>'
+        body += (f'<h2 id="{sid}"><span>{title}</span>'
+                 f'<button class="magbtn">Magnify</button></h2>'
+                 f'<div class="grid compact">{cards}</div>')
 
 INDEX = """<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta http-equiv="refresh" content="300">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NYC Real Estate Dashboard</title>
 <style>
-body{margin:0;font-family:system-ui,sans-serif;background:#16161a;color:#eee}
-header{padding:14px 24px;background:#1f1f26}header small{color:#aaa}
-.wrap{padding:16px}
-h2{margin:24px 0 10px;font-size:18px;border-left:4px solid #e8590c;padding-left:10px}
-.kpis{display:flex;gap:12px;flex-wrap:wrap}
-.kpi{background:#1f1f26;border-radius:8px;padding:12px 18px;min-width:130px}
-.kpi .v{font-size:22px;font-weight:700}.kpi .l{color:#aaa;font-size:12px}
-.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(480px,1fr))}
-section{background:#1f1f26;border-radius:8px;padding:12px}
-section h3{margin:0 0 8px;font-size:15px}
-img{width:100%;height:auto;background:#fff;border-radius:6px}
-iframe{width:100%;height:640px;border:0;border-radius:6px}
+:root{--bg:#0f1014;--card:#1a1b22;--line:#2a2b35;--text:#ececf1;--muted:#8d8fa0;--accent:#ff7a45}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:70px}
+body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;
+ gap:16px;flex-wrap:wrap;padding:12px 28px;background:rgba(15,16,20,.85);backdrop-filter:blur(10px);
+ border-bottom:1px solid var(--line)}
+.brand{font-weight:700;font-size:18px;letter-spacing:.2px}
+.brand span{color:var(--accent)}
+.upd{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;background:#37d67a;box-shadow:0 0 8px #37d67a}
+nav{display:flex;gap:8px;flex-wrap:wrap}
+nav a{color:var(--muted);text-decoration:none;font-size:13px;padding:5px 12px;border:1px solid var(--line);
+ border-radius:999px;transition:.15s}
+nav a:hover{color:var(--text);border-color:var(--accent)}
+.wrap{max-width:1500px;margin:0 auto;padding:20px 28px 60px}
+.kpis{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.kpi{background:linear-gradient(145deg,var(--card),#15161c);border:1px solid var(--line);
+ border-radius:14px;padding:16px 18px;border-top:3px solid var(--accent)}
+.kpi .v{font-size:26px;font-weight:700}
+.kpi .l{color:var(--muted);font-size:12px;margin-top:4px;text-transform:uppercase;letter-spacing:.6px}
+h2{margin:34px 0 14px;font-size:15px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);
+ display:flex;align-items:center;gap:10px}
+h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(460px,1fr))}
+.grid.compact{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.grid.compact .card{padding:8px}
+.grid.compact .card h3{font-size:12px;margin-bottom:6px}
+.grid.big{grid-template-columns:1fr;max-width:1100px;margin:0 auto;gap:22px}
+.grid.big .card{padding:18px}
+.grid.big .card h3{font-size:17px;margin-bottom:12px}
+.magbtn{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:999px;
+ padding:5px 14px;font-size:12px;cursor:pointer;transition:.15s;text-transform:none;letter-spacing:0}
+.magbtn:hover{border-color:var(--accent);color:var(--accent)}
+h2 .magbtn{order:2}
+h2::after{order:1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;
+ transition:transform .15s,border-color .15s}
+.card:hover{transform:translateY(-2px);border-color:#44465a}
+.card h3{margin:0 0 10px;font-size:14px;font-weight:600}
+.card img{width:100%;height:auto;border-radius:8px;cursor:zoom-in;display:block}
+.map{padding:0;overflow:hidden}
+.map iframe{width:100%;height:68vh;min-height:460px;border:0;display:block}
+#lb{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;
+ justify-content:center;z-index:100;cursor:zoom-out;padding:24px}
+#lb img{max-width:95vw;max-height:92vh;border-radius:10px}
+@media(max-width:560px){.grid{grid-template-columns:1fr}.wrap{padding:14px}header{padding:10px 14px}}
 </style></head><body>
-<header><h2 style="margin:0;border:0;padding:0">NYC Real Estate Dashboard</h2>
-<small>Last updated __STAMP__ (rebuilt hourly)</small></header>
+<header>
+ <div class="brand">NYC <span>Real Estate</span> Dashboard</div>
+ <nav><a href="#map">Map</a>__NAV__</nav>
+ <button class="magbtn" id="magAll">Magnify all</button>
+ <div class="upd"><span class="dot"></span>Updated __STAMP__ &middot; hourly</div>
+</header>
 <div class="wrap">
-<div class="kpis">__KPIS__</div>
-<h2>Heatmap</h2>
-<section><iframe src="permits_geo_heatmap.html?v=__V__"></iframe></section>
-__BODY__
-</div></body></html>"""
+ <div class="kpis">__KPIS__</div>
+ <h2 id="map">Heatmap</h2>
+ <section class="card map"><iframe src="permits_geo_heatmap.html?v=__V__"></iframe></section>
+ __BODY__
+</div>
+<div id="lb"><img alt=""></div>
+<script>
+const lb=document.getElementById("lb"),lbi=lb.querySelector("img");
+document.querySelectorAll(".card img").forEach(i=>i.onclick=()=>{lbi.src=i.src;lb.style.display="flex"});
+lb.onclick=()=>lb.style.display="none";
+function setMode(g,big){g.classList.toggle("big",big);g.classList.toggle("compact",!big);
+ const b=g.previousElementSibling.querySelector(".magbtn");if(b)b.textContent=big?"Back to overview":"Magnify"}
+document.querySelectorAll("h2 .magbtn").forEach(b=>b.onclick=()=>{
+ const g=b.parentElement.nextElementSibling,big=!g.classList.contains("big");
+ setMode(g,big);if(big)b.parentElement.scrollIntoView({behavior:"smooth"})});
+let allBig=false;
+document.getElementById("magAll").onclick=function(){allBig=!allBig;
+ document.querySelectorAll(".grid").forEach(g=>setMode(g,allBig));
+ this.textContent=allBig?"Overview all":"Magnify all"};
+document.onkeydown=e=>{if(e.key==="Escape")lb.style.display="none"};
+</script></body></html>"""
 
-page = (INDEX.replace("__STAMP__", dt.datetime.now().strftime("%Y-%m-%d %H:%M"))
-             .replace("__KPIS__", "".join(k)).replace("__V__", str(v)).replace("__BODY__", body))
+page = (INDEX.replace("__STAMP__", dt.datetime.now().strftime("%b %d, %H:%M"))
+             .replace("__KPIS__", "".join(k)).replace("__NAV__", nav)
+             .replace("__V__", str(v)).replace("__BODY__", body))
 Path(f"{OUT}/index.html").write_text(page, encoding="utf-8")
 print("Saved index.html")
