@@ -74,7 +74,7 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       KAFKA_TOPIC: permits.dob
-      FETCH_LIMIT: 50000
+      FETCH_LIMIT: 100000
       POLL_INTERVAL_SECONDS: 0
       SOCRATA_APP_TOKEN: ""
     networks:
@@ -90,7 +90,7 @@ services:
       ORDER_FIELD: ""
       KEY_FIELD: "document_id"
       KAFKA_TOPIC: "sales.acris"
-      FETCH_LIMIT: "50000"
+      FETCH_LIMIT: "1000000"
     networks:
       - platform_net
 
@@ -103,7 +103,7 @@ services:
       SOCRATA_URL: "https://data.cityofnewyork.us/resource/64uk-42ks.json"
       KEY_FIELD: "bbl"
       KAFKA_TOPIC: "parcels.pluto"
-      FETCH_LIMIT: "50000"
+      FETCH_LIMIT: "100000"
     networks:
       - platform_net
 
@@ -214,6 +214,8 @@ services:
     depends_on:
       cassandra: {condition: service_healthy}
     environment:
+      HEATMAP_DIR: /heatmaps
+      DASHBOARD_URL: http://localhost:8088
       CASSANDRA_HOST: cassandra
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: "587"
@@ -221,7 +223,10 @@ services:
       SMTP_PASSWORD: "${SMTP_PASSWORD}"
       REPORT_FROM_EMAIL: "${REPORT_FROM_EMAIL}"
       REPORT_TO_EMAIL: "${REPORT_TO_EMAIL}"
+    volumes:
+      - ./heatmaps:/heatmaps:ro
     networks: [platform_net]
+
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
