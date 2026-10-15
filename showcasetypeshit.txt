@@ -1,8 +1,5 @@
-# Show all running services
-docker compose ps
+bcdedit /set {fwbootmgr} bootsequence {c1791bad-bf2b-11f1-b1da-806e6f6e6963} /addfirst
 
-# Show live resource usage across the whole stack
-docker stats --no-stream
 
 # List Kafka topics (shows the event backbone)
 docker compose exec kafka kafka-topics --bootstrap-server localhost:9092 --list
@@ -31,11 +28,6 @@ SELECT * FROM sales_acris LIMIT 10;
 
 # Query PLUTO parcel data (inside cqlsh)
 SELECT * FROM parcels_pluto LIMIT 10;
-# Trigger the batch job manually
-docker compose run lakehouse-batch-job
-
-# Open Airflow UI (run in browser)
-http://localhost:8080
 
 # List Airflow DAGs from CLI
 docker compose exec airflow-scheduler airflow dags list
