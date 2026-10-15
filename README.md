@@ -189,7 +189,6 @@ docker compose run --rm --entrypoint find lakehouse-batch-job /data/lakehouse -m
 **Daily report**: a PDF titled "NYC Real-Estate Daily Market Pulse" with KPIs, tables, and charts, emailed via SMTP with heatmap snapshots.
 
 ## Known limitations
-
 - Ingestion is a periodic snapshot (latest N records per run), not true incremental or CDC. Cassandra upserts by primary key keep it idempotent.
 - The `silver` layer is a copy of `bronze`; the only `gold` table is `permits_by_borough`.
 - ACRIS records only carry document-level fields (type, date, amount, borough). They are not joined to PLUTO parcels.
@@ -198,9 +197,6 @@ docker compose run --rm --entrypoint find lakehouse-batch-job /data/lakehouse -m
 - Single-node Kafka and Cassandra with replication factor 1: development setup, not production.
 
 ## Security notes
-
-- Never commit `.env` (it is already in `.gitignore`). Use a Gmail app password, not your account password.
-- The Airflow containers mount `/var/run/docker.sock`, which gives them control of the host's Docker daemon. Fine locally; do not expose Airflow publicly.
 - Postgres credentials for Airflow (`airflow/airflow`) are hard-coded in the compose file. Change them for anything beyond local use.
 
 ## Data sources and attribution
