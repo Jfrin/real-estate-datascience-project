@@ -4,3 +4,5 @@ airflow/dags/__pycache__/daily_ingest.cpython-312.pyc
 /heatmaps
 .env
 showcasetypeshit.txt
+.pytest_cache/
+__pycache__/

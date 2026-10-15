@@ -1,5 +1,7 @@
 # NYC Real Estate Data Platform
 
+[![CI](https://github.com/<your-github-user>/<your-repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-github-user>/<your-repo>/actions/workflows/ci.yml)
+
 An end-to-end, Docker-based data engineering project that ingests New York City real-estate open data, streams it through Kafka and Spark into Cassandra, lands it in a Parquet lakehouse, and publishes heatmaps, a live dashboard, and a daily emailed PDF report. Airflow schedules the recurring jobs.
 
 ## What it does
@@ -187,6 +189,20 @@ docker compose run --rm --entrypoint find lakehouse-batch-job /data/lakehouse -m
 **Dashboard / heatmaps** (`heatmaps/`): permit trend, permit types, permits by borough × month, borough × type and neighborhood × type, top permit owners, an interactive geo heatmap, ACRIS deed volume, document types, median price and price distribution, PLUTO assessed value per sq ft, year-built distribution, and top parcel owners.
 
 **Daily report**: a PDF titled "NYC Real-Estate Daily Market Pulse" with KPIs, tables, and charts, emailed via SMTP with heatmap snapshots.
+
+## Testing and CI
+
+The per-source `clean` transformations in `spark-streaming-job/streaming_job.py` are covered by pytest (null-key filtering, renames, type casts, date/timestamp parsing, bad-value handling, and a check that cleaned columns match the Cassandra DDL). Tests run on a local Spark session, with no Kafka or Cassandra needed.
+
+```bash
+cd spark-streaming-job
+pip install -r requirements-dev.txt   # needs a JDK (17 or 21) on PATH
+pytest
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the tests, builds every service image, and re-runs the tests inside the streaming-job image on each push and pull request.
+
+Disregad pip warnings when ran manually as the container is thrown away after the run.
 
 ## Known limitations
 - Ingestion is a periodic snapshot (latest N records per run), not true incremental or CDC. Cassandra upserts by primary key keep it idempotent.
