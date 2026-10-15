@@ -1,7 +1,4 @@
 # NYC Real Estate Data Platform
-
-[![CI](https://github.com/<your-github-user>/<your-repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-github-user>/<your-repo>/actions/workflows/ci.yml)
-
 An end-to-end, Docker-based data engineering project that ingests New York City real-estate open data, streams it through Kafka and Spark into Cassandra, lands it in a Parquet lakehouse, and publishes heatmaps, a live dashboard, and a daily emailed PDF report. Airflow schedules the recurring jobs.
 
 ## What it does
