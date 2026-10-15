@@ -193,7 +193,6 @@ docker compose run --rm --entrypoint find lakehouse-batch-job /data/lakehouse -m
 - The `silver` layer is a copy of `bronze`; the only `gold` table is `permits_by_borough`.
 - ACRIS records only carry document-level fields (type, date, amount, borough). They are not joined to PLUTO parcels.
 - The Spark job writes rows to Cassandra one at a time inside `foreachBatch`, which is fine at this scale but is the first thing to optimize.
-- `dashboard/` is an earlier Plotly-based dashboard experiment. It targets a different keyspace and tables (`esra`, `neighborhood_daily_agg`, ...) that this pipeline does not create, and it is not wired into the current `docker-compose.yml`. The live dashboard is `heatmap-job` + nginx.
 - Single-node Kafka and Cassandra with replication factor 1: development setup, not production.
 
 ## Security notes
